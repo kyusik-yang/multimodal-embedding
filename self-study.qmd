@@ -306,7 +306,7 @@ A comprehensive search across Semantic Scholar, OpenAlex, and Google Scholar (Ma
 
 - Dietrich, B. J., Hayes, M., & O'Brien, D. Z. (2019). Pitch perfect: Vocal pitch and the emotional intensity of Congressional speech. *American Political Science Review*, 113(4), 941-962.
     - Pioneering "audio as data" in political science.
-- Knox, D. & Lucas, C. (2025). Partisan conflict in nonverbal communication. *Political Science Research and Methods*. [DOI](https://doi.org/10.1017/psrm.2025.10059)
+- Rask, M. & Hjorth, F. (2025). Partisan conflict in nonverbal communication. *Political Science Research and Methods*. [DOI](https://doi.org/10.1017/psrm.2025.10059)
     - Audio-only (vocal pitch in Danish parliamentary debates).
 
 **Strand 3: Two-modality combinations (text + one other).**
