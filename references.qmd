@@ -20,14 +20,41 @@ Key properties for this project:
 
 ### ImageBind (Meta)
 
-An earlier multimodal embedding model from Meta AI (2023) that also maps multiple modalities into a shared space. We initially considered ImageBind but chose Gemini Embedding 2 because:
-
-- ImageBind lacks native Korean language support
-- It requires local GPU inference (no managed API)
-- Gemini's audio encoder handles speech content more effectively for our use case
+An earlier multimodal embedding model from Meta AI (2023) that also maps multiple modalities into a shared space. ImageBind uses image embeddings as an anchor, aligning other modalities (audio, text, depth, thermal, IMU) to the image space via contrastive learning.
 
 - [ImageBind paper](https://arxiv.org/abs/2305.05665) - Girdhar et al. (2023), "ImageBind: One Embedding Space To Bind Them All"
 - [GitHub repository](https://github.com/facebookresearch/ImageBind)
+
+### Why we chose Gemini Embedding 2 over ImageBind
+
+We initially planned to use ImageBind (see `pipeline_v1.txt`). After evaluating both models against our specific requirements, we switched to Gemini Embedding 2. The comparison below explains this decision.
+
+|  | Gemini Embedding 2 | ImageBind |
+|--|---------------------|-----------|
+| **Release** | March 2025 (Google) | May 2023 (Meta) |
+| **Architecture** | Joint multimodal encoder | Image-anchored contrastive |
+| **Dimensions** | 3072 (or 768, 256) | 1024 |
+| **Text input** | Native, 100+ languages | CLIP-based, English-centric |
+| **Audio input** | Speech + non-speech, multilingual | 2-second clips, environment sounds |
+| **Video input** | Up to 120 seconds natively | Frame sampling (indirect) |
+| **Korean support** | Native (trained on Korean text and speech) | Minimal (no Korean speech training) |
+| **Inference** | Cloud API (Google AI Studio) | Local GPU (A100 recommended) |
+| **Cost** | Pay-per-use (~$0.007-0.043/short) | Free (but requires GPU hardware) |
+| **Batch processing** | API with rate limits | Limited by local GPU memory |
+
+::: {.callout-important}
+## The decisive factor: Korean speech
+Political YouTube Shorts are dominated by spoken Korean. ImageBind's audio encoder was trained on environmental sounds (AudioSet), not speech. It processes audio in 2-second clips and lacks Korean language training entirely. For our use case, this is a critical limitation.
+
+Gemini Embedding 2's audio encoder handles continuous speech in 100+ languages, including Korean, making it fundamentally better suited for political communication analysis where what politicians *say* matters more than background visuals.
+:::
+
+**When ImageBind might still be the better choice:**
+
+- Research on visual-only content (no speech component)
+- Projects requiring local/offline processing (data privacy constraints)
+- Budget of zero (no API costs, but GPU hardware needed)
+- Non-language modalities: depth, thermal, or IMU data
 
 ## Dimensionality reduction
 
