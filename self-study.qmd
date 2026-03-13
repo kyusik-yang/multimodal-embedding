@@ -1,0 +1,354 @@
+---
+title: "Self-Study Guide"
+subtitle: "From Vector Spaces to Multimodal Political Communication Analysis"
+---
+
+This guide is designed for a political scientist who wants to deeply understand the methodological foundations behind this project. It is organized in five phases, each building on the previous one. For each phase, we provide core concepts, recommended readings, practical exercises, and self-check questions.
+
+::: {.callout-tip}
+## How to use this guide
+Work through the phases in order. Each phase takes roughly one week of part-time study. The readings are ranked: start with the **essential** ones, then move to **recommended** if you want deeper understanding. **Optional** readings are for specific interests.
+:::
+
+---
+
+## Phase 1: What are embeddings?
+
+### Core idea
+
+An embedding is a learned mapping from discrete objects (words, sentences, images, audio clips) to continuous vectors in $\mathbb{R}^d$. The key property is that **semantic similarity maps to geometric proximity**: objects with similar meanings end up close together in vector space.
+
+This is not a metaphor. When we say two politicians' Shorts are "similar," we mean their embedding vectors have a high cosine similarity, a precise, measurable quantity.
+
+### 1.1 From words to vectors
+
+The modern embedding story begins with a simple observation: words that appear in similar contexts tend to have similar meanings (the *distributional hypothesis*). Word2Vec operationalized this by training a shallow neural network to predict a word from its neighbors (or vice versa), producing vectors where `king - man + woman ≈ queen`.
+
+**Key concepts to understand:**
+
+- **Distributional hypothesis**: meaning is determined by context of use
+- **Skip-gram vs CBOW**: two Word2Vec architectures (skip-gram predicts context from word; CBOW predicts word from context)
+- **Negative sampling**: computational trick that makes training feasible
+- **Vector arithmetic**: why `king - man + woman ≈ queen` works (and when it doesn't)
+
+**Essential readings:**
+
+- Mikolov, T., Chen, K., Corrado, G., & Dean, J. (2013). Efficient estimation of word representations in vector space. *arXiv:1301.3781*. [arXiv](https://arxiv.org/abs/1301.3781)
+    - The Word2Vec paper. Read sections 1-3 for intuition. The training details (section 4) are less important for applied researchers.
+- Pennington, J., Socher, R., & Manning, C. D. (2014). GloVe: Global vectors for word representation. *EMNLP*, 1532-1543. [DOI](https://doi.org/10.3115/v1/D14-1162)
+    - GloVe explicitly factorizes the word co-occurrence matrix. Understanding both Word2Vec and GloVe clarifies that embeddings capture statistical regularities in language.
+
+**Recommended readings:**
+
+- Bengio, Y., Ducharme, R., Vincent, P., & Jauvin, C. (2003). A neural probabilistic language model. *Journal of Machine Learning Research*, 3, 1137-1155. [JMLR](https://jmlr.org/papers/v3/bengio03a.html)
+    - The paper that started neural language modeling. Historical context helps you see where the ideas come from.
+- Jurafsky, D. & Martin, J. H. (2024). *Speech and Language Processing* (3rd ed.), Chapter 6: Vector Semantics and Embeddings. [Online draft](https://web.stanford.edu/~jurafsky/slp3/6.pdf)
+    - The best textbook explanation. Free, clear, and does not assume ML background.
+
+**Practical exercise:**
+
+```python
+# Load pre-trained word vectors and explore
+import gensim.downloader as api
+model = api.load("word2vec-google-news-300")
+
+# Find similar words
+model.most_similar("politician", topn=10)
+
+# Vector arithmetic
+model.most_similar(positive=["korea", "parliament"], negative=["japan"], topn=5)
+
+# Measure similarity
+model.similarity("democrat", "republican")
+```
+
+**Self-check questions:**
+
+1. Why do Word2Vec vectors capture semantic relationships? What is the training signal?
+2. If two words never co-occur in the training corpus but appear in similar contexts, will their embeddings be similar? Why?
+3. What is the dimensionality of Word2Vec vectors, and what does each dimension represent? (Trick question: individual dimensions are not interpretable.)
+
+### 1.2 From words to sentences and documents
+
+Word embeddings represent individual tokens. For our project, we need to embed entire videos (with audio, text, and visuals). The path from word vectors to document/multimodal vectors involves two key advances: contextualized embeddings (BERT) and sentence embeddings (Sentence-BERT).
+
+**Key concepts to understand:**
+
+- **Static vs contextualized embeddings**: Word2Vec gives one vector per word; BERT gives different vectors for "bank" in "river bank" vs "bank account"
+- **Transformer architecture**: the self-attention mechanism that powers BERT and all modern language models
+- **Sentence embeddings**: mapping a full sentence to a single vector (mean pooling, [CLS] token, or Sentence-BERT's Siamese network)
+- **Fine-tuning vs feature extraction**: when to train further, when to use embeddings as-is
+
+**Essential readings:**
+
+- Vaswani, A., Shazeer, N., Parmar, N., et al. (2017). Attention is all you need. *NeurIPS*. [arXiv](https://arxiv.org/abs/1706.03762)
+    - The Transformer paper. Focus on section 3 (model architecture) and the intuition behind self-attention. The multi-head attention diagram is worth studying carefully.
+- Devlin, J., Chang, M., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. *NAACL-HLT*, 4171-4186. [arXiv](https://arxiv.org/abs/1810.04805)
+    - BERT introduced the idea of pre-training a deep model on unlabeled text, then fine-tuning for specific tasks. Read sections 1-3.
+- Reimers, N. & Gurevych, I. (2019). Sentence-BERT: Sentence embeddings using Siamese BERT-Networks. *EMNLP*, 3982-3992. [arXiv](https://arxiv.org/abs/1908.10084)
+    - Sentence-BERT is the standard method for producing sentence-level embeddings. This is the bridge between word embeddings and the multimodal embeddings we use.
+
+**Recommended readings:**
+
+- Jay Alammar's blog: [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/)
+    - The single best visual explanation of the Transformer. Read this before or alongside the Vaswani paper.
+
+**Self-check questions:**
+
+1. What problem does self-attention solve that RNNs could not?
+2. Why can't you simply average Word2Vec vectors to get a good sentence embedding?
+3. What is the difference between BERT's [CLS] token embedding and Sentence-BERT's output? Why does it matter for similarity tasks?
+
+---
+
+## Phase 2: Multimodal embeddings
+
+### Core idea
+
+A multimodal embedding model maps inputs from different modalities (text, image, audio, video) into a **single shared vector space**. Two items are close in this space if they are semantically related, regardless of modality: a photo of a cat and the sentence "a cute cat" should have similar vectors.
+
+This is what makes our project possible. We embed entire YouTube Shorts (with all their modalities) into vectors, then compare them using standard geometric operations.
+
+### 2.1 Contrastive learning and CLIP
+
+The breakthrough came from CLIP (Contrastive Language-Image Pre-training), which learned to align image and text embeddings by training on 400 million image-caption pairs from the internet.
+
+**Key concepts to understand:**
+
+- **Contrastive learning**: train the model so matching pairs (image + correct caption) are close, non-matching pairs are far apart
+- **InfoNCE loss**: the specific loss function used (a softmax over cosine similarities)
+- **Zero-shot transfer**: CLIP can classify images into categories it has never been explicitly trained on, by comparing image embeddings to text embeddings of category names
+- **Modality gap**: even in a "shared" space, vectors from different modalities tend to occupy distinct regions
+
+**Essential readings:**
+
+- Radford, A., Kim, J. W., Hallacy, C., et al. (2021). Learning transferable visual models from natural language supervision. *ICML*, 8748-8763. [arXiv](https://arxiv.org/abs/2103.00020)
+    - The CLIP paper. Sections 1-2 give the intuition; section 2.3 describes the contrastive training. This paper is the conceptual foundation for all subsequent multimodal embedding models.
+
+**Recommended readings:**
+
+- Liang, V. W., Zhang, Y., Kwon, Y., Yeung, S., & Zou, J. Y. (2022). Mind the gap: Understanding the modality gap in multi-modal contrastive representation learning. *NeurIPS*. [arXiv](https://arxiv.org/abs/2203.02053)
+    - Important for understanding a limitation: different modalities don't perfectly overlap in the shared space. Relevant when we interpret cross-modal similarity scores.
+
+### 2.2 From images to everything: ImageBind and Gemini
+
+ImageBind extended the CLIP idea to six modalities by using images as a universal anchor. Gemini Embedding 2 takes a different approach with a joint encoder trained natively on all modalities.
+
+**Key concepts to understand:**
+
+- **Image-anchored alignment** (ImageBind): align audio-to-image, text-to-image, etc., and transitivity gives you audio-to-text alignment "for free"
+- **Joint multimodal encoding** (Gemini): process all modalities together through a single encoder, producing a truly unified representation
+- **Trade-offs**: anchored alignment is elegant but limited by the anchor modality; joint encoding is more powerful but requires more training data
+
+**Essential readings:**
+
+- Girdhar, R., El-Nouby, A., Liu, Z., et al. (2023). ImageBind: One embedding space to bind them all. *CVPR*, 15180-15190. [arXiv](https://arxiv.org/abs/2305.05665)
+    - Read sections 1-3 for the architecture and the "binding" idea. Section 4.3 on emergent alignment (audio-text without paired training data) is the key insight.
+- Google Gemini Embedding 2 documentation: [ai.google.dev/gemini-api/docs/embeddings](https://ai.google.dev/gemini-api/docs/embeddings)
+    - Technical documentation for the model we actually use. No academic paper exists yet, so the docs are the primary source.
+
+**Self-check questions:**
+
+1. How does contrastive learning differ from supervised classification? What is the training signal?
+2. In ImageBind's anchored alignment, if audio and images are aligned, and text and images are aligned, why does audio-text similarity work at all? What are the limitations of this transitive alignment?
+3. Why might a 3072-dimensional Gemini embedding capture different information than a 1024-dimensional ImageBind embedding of the same video?
+
+---
+
+## Phase 3: Measuring similarity and reducing dimensions
+
+### Core idea
+
+Once we have embedding vectors, we need tools to (1) measure how similar they are and (2) visualize high-dimensional data in 2D. Both operations have deep mathematical foundations that are worth understanding.
+
+### 3.1 Cosine similarity
+
+**Key concepts to understand:**
+
+- **Cosine similarity vs Euclidean distance**: for normalized vectors, cosine similarity = 1 - (Euclidean distance$^2$ / 2). They contain the same information, but cosine is more interpretable for embeddings.
+- **Why cosine, not dot product?**: cosine controls for vector magnitude. Two long documents and two short documents might have very different magnitudes but similar content.
+- **Interpreting cosine similarity values**: 0.95 is very similar; 0.7 is moderately similar; below 0.5 is typically dissimilar. But thresholds depend on the embedding model and domain.
+- **Pairwise similarity matrix**: an $N \times N$ matrix where entry $(i,j)$ is the cosine similarity between items $i$ and $j$
+
+**Practical exercise:**
+
+```python
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Generate random unit vectors
+rng = np.random.default_rng(42)
+vecs = rng.standard_normal((100, 3072))
+vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
+
+# Compute pairwise similarity
+sim = cosine_similarity(vecs)
+print(f"Mean pairwise similarity: {sim[np.triu_indices(100, k=1)].mean():.4f}")
+# For random unit vectors in high dimensions, this should be near 0
+```
+
+### 3.2 UMAP: theory and practice
+
+UMAP (Uniform Manifold Approximation and Projection) is not just a visualization tool. It is grounded in Riemannian geometry and algebraic topology. Understanding the theory helps you make better parameter choices.
+
+**Key concepts to understand:**
+
+- **Manifold assumption**: high-dimensional data lies on a lower-dimensional manifold (surface) embedded in the full space
+- **Fuzzy simplicial sets**: UMAP constructs a weighted graph of nearest neighbors, then finds a low-dimensional layout that preserves this graph structure
+- **Local vs global structure**: UMAP preserves local neighborhoods well. Global distances (between distant clusters) are less reliable.
+- **Key parameters**: `n_neighbors` (local vs global balance), `min_dist` (how tightly points cluster), `metric` (cosine for embeddings)
+- **Stochasticity**: UMAP is non-deterministic. Always set `random_state` for reproducibility.
+
+**Essential readings:**
+
+- McInnes, L., Healy, J., & Melville, J. (2018). UMAP: Uniform manifold approximation and projection for dimension reduction. *arXiv:1802.03426*. [arXiv](https://arxiv.org/abs/1802.03426)
+    - The full UMAP paper. Sections 1-2 give the mathematical foundations (topology, fuzzy sets). Section 3 describes the algorithm. If the math is too heavy, focus on sections 1, 3, and 5 (practical considerations).
+- [Understanding UMAP](https://pair-code.github.io/understanding-umap/) - Google PAIR interactive explainer
+    - Start here. Interactive visualizations show how each parameter affects the output. Then read the paper for the theory behind what you've seen.
+
+**Recommended readings:**
+
+- van der Maaten, L. & Hinton, G. (2008). Visualizing data using t-SNE. *Journal of Machine Learning Research*, 9, 2579-2605. [JMLR](https://jmlr.org/papers/v9/vandermaaten08a.html)
+    - The predecessor to UMAP. Understanding t-SNE helps you appreciate what UMAP improves (speed, global structure, theoretical grounding).
+
+**Self-check questions:**
+
+1. If two clusters appear far apart in a UMAP plot, can you conclude they are far apart in the original high-dimensional space? Why or why not?
+2. You run UMAP twice with the same parameters but different `random_state` values. The cluster shapes change. Is this a bug? What should you do?
+3. Why do we use `metric="cosine"` for embedding data instead of the default Euclidean?
+
+### 3.3 HDBSCAN: density-based clustering
+
+**Key concepts to understand:**
+
+- **Why not K-means?**: K-means requires specifying $k$ in advance and assumes spherical clusters. Political communication styles don't come in neat, equally-sized groups.
+- **Density-based clustering**: clusters are regions of high density separated by regions of low density. Points in low-density regions are labeled as noise.
+- **Hierarchical approach**: HDBSCAN builds a hierarchy of clusters at different density levels, then extracts the most stable clusters.
+- **UMAP + HDBSCAN pipeline**: reduce to ~10 dimensions with UMAP first (not 2D), then cluster. This is standard practice and avoids the curse of dimensionality.
+
+**Essential readings:**
+
+- Campello, R. J. G. B., Moulavi, D., & Sander, J. (2013). Density-based clustering based on hierarchical density estimates. *PAKDD*, 160-172. [DOI](https://doi.org/10.1007/978-3-642-37456-2_14)
+    - The original HDBSCAN paper. Focus on sections 1-3 for the algorithm intuition.
+- McInnes, L., Healy, J., & Astels, S. (2017). hdbscan: Hierarchical density based clustering. *Journal of Open Source Software*, 2(11), 205. [DOI](https://doi.org/10.21105/joss.00205)
+    - Short paper describing the Python implementation. Good for practical parameter guidance.
+- [HDBSCAN documentation: How HDBSCAN works](https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html)
+    - Step-by-step visual walkthrough. Read this alongside the Campello paper.
+
+**Self-check questions:**
+
+1. A politician's Shorts get assigned cluster label -1. What does this mean? Is it necessarily bad?
+2. Why do we cluster in 10-dimensional UMAP space rather than the original 3072 dimensions?
+3. You increase `min_cluster_size` from 10 to 30. What happens to the number of clusters? What happens to the number of noise points?
+
+---
+
+## Phase 4: Embeddings in social science research
+
+### Core idea
+
+Embeddings are not just an engineering tool. They encode a theory of meaning: items are represented by their relationships to other items, not by pre-defined categories. This makes them both powerful and potentially opaque. Using them responsibly in social science requires understanding what they capture and what they miss.
+
+### 4.1 Text-as-data in political science
+
+Before multimodal embeddings, political scientists developed methods for analyzing text as numerical data. This literature provides the methodological foundation and the standards of evidence our project should meet.
+
+**Essential readings:**
+
+- Grimmer, J. & Stewart, B. M. (2013). Text as data: The promise and pitfalls of automatic content analysis methods for political texts. *Political Analysis*, 21(3), 267-297. [DOI](https://doi.org/10.1093/pan/mps028)
+    - The foundational paper on text-as-data in political science. Key message: all text analysis models are wrong, but some are useful. Validation is essential.
+- Grimmer, J., Roberts, M. E., & Stewart, B. M. (2022). *Text as Data: A New Framework for Machine Learning and the Social Sciences*. Princeton University Press. [Publisher](https://press.princeton.edu/books/paperback/9780691207551/text-as-data)
+    - The textbook version. Chapters 1-5 cover the conceptual framework. Chapter 8 (embeddings) is directly relevant. Read this as your primary social science methods reference.
+- Gentzkow, M., Kelly, B., & Taddy, M. (2019). Text as data. *Journal of Economic Literature*, 57(3), 535-574. [DOI](https://doi.org/10.1257/jel.20181020)
+    - Economics perspective on text analysis. More formal treatment of identification and estimation. Good for understanding the econometric side of our panel regression.
+
+### 4.2 Word embeddings in social science
+
+Political scientists and sociologists have begun using word embeddings not just as features, but as measurement tools for theoretical constructs like ideology, culture, and framing.
+
+**Essential readings:**
+
+- Rodriguez, P. L. & Spirling, A. (2022). Word embeddings: What works, what doesn't, and how to tell the difference for applied research. *Journal of Politics*, 84(1), 101-115. [DOI](https://doi.org/10.1086/715162)
+    - Practical guidance for social scientists using embeddings. Covers model selection, validation, and interpretation. Directly applicable to our work.
+- Kozlowski, A. C., Taddy, M., & Evans, J. A. (2019). The geometry of culture: Analyzing the meanings of class through word embeddings. *American Sociological Review*, 84(5), 905-949. [DOI](https://doi.org/10.1177/0003122419877135)
+    - Demonstrates that embedding geometry can capture cultural meaning. The "cultural dimensions" approach (projecting onto axes defined by antonym pairs) is methodologically instructive.
+- Rheault, L. & Cochrane, C. (2020). Word embeddings for the analysis of ideological placement in parliamentary corpora. *Political Analysis*, 28(1), 112-133. [DOI](https://doi.org/10.1017/pan.2019.26)
+    - Applies embeddings to measure ideology from parliamentary speeches. Closest existing precedent for our use of embeddings in political communication research.
+
+**Recommended readings:**
+
+- Torres, M. & Cantú, F. (2022). Learning to see: Convolutional neural networks for the analysis of social science data. *Political Analysis*, 30(1), 113-131. [DOI](https://doi.org/10.1017/pan.2021.9)
+    - Uses image analysis (CNNs) for political science. Demonstrates visual data analysis in our discipline, which connects to the video modality in our embeddings.
+
+### 4.3 From text embeddings to multimodal
+
+Our project extends the text-as-data paradigm to video-as-data. This is a frontier area with very few existing applications in political science. Understanding the conceptual leap is important.
+
+**Key questions to think through:**
+
+1. **What does a multimodal embedding capture that text alone does not?** A politician's tone of voice, facial expressions, background setting, editing style, and visual branding are all encoded in the video embedding but absent from text. Whether this additional information is theoretically meaningful for our research questions is an empirical question, which the pilot study addresses.
+
+2. **Validity**: How do we know the embedding captures what we think it captures? In text analysis, we can inspect the words. In multimodal embeddings, the representation is less interpretable. We validate by: (a) checking that known-similar items (same politician, same party) cluster together, (b) comparing embedding-based similarity to human similarity judgments, and (c) comparing embedding strategies (text-only vs multimodal) to see what the additional modalities add.
+
+3. **Measurement vs explanation**: Embeddings measure similarity, not causation. Our regression model uses embedding-derived similarity as a dependent variable and explains variation with theoretically motivated predictors (party, seniority, election proximity). The embedding itself is a measurement tool, not a causal model.
+
+---
+
+## Phase 5: Panel methods and causal inference
+
+### Core idea
+
+We construct a **politician x month** panel where the dependent variable is pairwise cosine similarity derived from embeddings. This requires understanding panel data econometrics and event study designs.
+
+### 5.1 Panel data fundamentals
+
+**Key concepts to understand:**
+
+- **Fixed effects**: control for time-invariant unobserved heterogeneity (politician FE) and common time shocks (month FE)
+- **Dyadic data**: our observations are politician-pairs, not individual politicians. This affects standard error computation (cluster at the dyad level).
+- **Within vs between variation**: fixed effects use only within-unit variation. A politician who is always different from their party will not contribute to the "same party" coefficient.
+
+**Essential readings:**
+
+- Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data* (2nd ed.). MIT Press.
+    - The standard reference. Chapters 10-11 cover fixed effects and panel methods. You likely already know this material from your coursework, but revisit the sections on clustering.
+
+**Recommended readings:**
+
+- Aronow, P. M., Samii, C., & Assenova, V. A. (2015). Cluster-robust variance estimation for dyadic data. *Political Analysis*, 23(4), 564-577. [DOI](https://doi.org/10.1093/pan/mpv018)
+    - Directly relevant: standard errors for dyadic (pairwise) data. Our similarity matrix is inherently dyadic.
+
+### 5.2 Event study design
+
+We use an event study to test whether politicians' Shorts converge as elections approach.
+
+**Key concepts to understand:**
+
+- **Pre-trends**: the identifying assumption is that similarity would have remained flat absent the election. We test this by examining pre-election periods.
+- **Reference period**: one period is set to zero; all coefficients are relative to it
+- **Dynamic treatment effects**: the effect of election proximity may change as the election gets closer
+
+**Essential readings:**
+
+- Freyaldenhoven, S., Hansen, C., & Shapiro, J. M. (2019). Pre-event trends in the panel event-study design. *American Economic Review*, 109(9), 3307-3338. [DOI](https://doi.org/10.1257/aer.20180609)
+    - Rigorous treatment of event studies. Focus on sections I-III for the framework. Their pre-trend test is directly applicable.
+
+---
+
+## Recommended study sequence
+
+| Week | Phase | Focus | Key deliverable |
+|------|-------|-------|-----------------|
+| 1 | Phase 1.1 | Word2Vec, GloVe | Run gensim exercise, read Mikolov |
+| 2 | Phase 1.2 | Transformers, BERT, Sentence-BERT | Read Illustrated Transformer, Reimers |
+| 3 | Phase 2.1 | CLIP, contrastive learning | Read Radford et al. |
+| 4 | Phase 2.2 | ImageBind, Gemini | Read Girdhar et al., Gemini docs |
+| 5 | Phase 3.1-3.2 | Cosine similarity, UMAP | Run UMAP interactive explainer |
+| 6 | Phase 3.3 | HDBSCAN | Run clustering on sample data |
+| 7 | Phase 4.1-4.2 | Text-as-data, embeddings in polisci | Read Rodriguez & Spirling, Grimmer |
+| 8 | Phase 4.3, 5 | Multimodal validity, panel methods | Design validation strategy for pilot |
+
+::: {.callout-note}
+## This is a living document
+As the project progresses, we will add new sections (e.g., batch processing at scale, specific modeling decisions) and update readings as new relevant work is published.
+:::

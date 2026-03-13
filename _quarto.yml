@@ -28,6 +28,7 @@ book:
         - 04-panel.qmd
     - part: "Appendix"
       chapters:
+        - self-study.qmd
         - references.qmd
 
 format:
