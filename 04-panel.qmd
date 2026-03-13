@@ -1,0 +1,308 @@
+---
+title: "4. Panel Design - Aggregation, Regression, and Scale-Up"
+date: "2026-03-13"
+execute:
+  eval: false
+---
+
+## Unit of analysis
+
+The core unit is **politician x month**: the average multimodal embedding of all Shorts published by a given politician in a given month.
+
+```
+Raw data:  1 row per Short  (video_id, politician, party, date, embedding)
+Panel:     1 row per politician-month  (politician, year_month, avg_embedding)
+```
+
+### Why monthly aggregation?
+
+- **Daily** is too noisy: most politicians post 0-2 Shorts per day.
+- **Quarterly** is too coarse: election campaigns shift strategies within weeks.
+- **Monthly** balances granularity with statistical power. A politician posting 10 Shorts/month yields a stable average vector.
+
+## Constructing the panel
+
+### Step 1: Load embeddings and metadata
+
+```{python}
+import numpy as np
+import pandas as pd
+
+# Load saved embeddings and metadata
+vectors = np.load("embeddings.npy")        # (N, 3072)
+df = pd.read_csv("metadata.csv")           # video_id, politician, party, date, ...
+
+df["date"] = pd.to_datetime(df["date"])
+df["year_month"] = df["date"].dt.to_period("M")
+
+print(f"Total Shorts: {len(df)}")
+print(f"Politicians:  {df['politician'].nunique()}")
+print(f"Date range:   {df['date'].min()} to {df['date'].max()}")
+```
+
+### Step 2: Monthly average embedding
+
+```{python}
+panel_rows = []
+
+for (pol, ym), group in df.groupby(["politician", "year_month"]):
+    idx = group.index.values
+    avg_vec = vectors[idx].mean(axis=0)         # (3072,)
+    avg_vec /= np.linalg.norm(avg_vec)          # re-normalize
+
+    panel_rows.append({
+        "politician": pol,
+        "year_month": str(ym),
+        "party": group["party"].iloc[0],
+        "n_shorts": len(group),
+        "embedding_idx": len(panel_rows),       # pointer into panel_vectors
+    })
+
+df_panel = pd.DataFrame(panel_rows)
+panel_vectors = np.stack([
+    vectors[df.loc[
+        (df["politician"] == r["politician"]) &
+        (df["year_month"].astype(str) == r["year_month"])
+    ].index].mean(axis=0)
+    for _, r in df_panel.iterrows()
+])
+
+# Re-normalize all panel vectors
+norms = np.linalg.norm(panel_vectors, axis=1, keepdims=True)
+panel_vectors = panel_vectors / norms
+
+print(f"Panel rows: {len(df_panel)}")
+print(f"Panel vectors shape: {panel_vectors.shape}")
+```
+
+::: {.callout-tip}
+## Why re-normalize?
+Averaging multiple unit vectors does not produce a unit vector. Re-normalizing ensures cosine similarity remains interpretable (range [-1, 1]).
+:::
+
+### Step 3: Pairwise similarity per month
+
+For regression, we need pairwise similarity scores between all politician pairs within each month.
+
+```{python}
+from sklearn.metrics.pairwise import cosine_similarity
+from itertools import combinations
+
+pair_rows = []
+
+for ym in df_panel["year_month"].unique():
+    month_df = df_panel[df_panel["year_month"] == ym]
+    month_vecs = panel_vectors[month_df.index]
+    pols = month_df["politician"].values
+    parties = month_df["party"].values
+
+    sim_matrix = cosine_similarity(month_vecs)
+
+    for i, j in combinations(range(len(pols)), 2):
+        pair_rows.append({
+            "year_month": ym,
+            "pol_i": pols[i],
+            "pol_j": pols[j],
+            "party_i": parties[i],
+            "party_j": parties[j],
+            "same_party": int(parties[i] == parties[j]),
+            "cosine_sim": sim_matrix[i, j],
+        })
+
+df_pairs = pd.DataFrame(pair_rows)
+print(f"Pairwise observations: {len(df_pairs)}")
+print(f"Mean similarity: {df_pairs['cosine_sim'].mean():.4f}")
+```
+
+## Regression model
+
+### Research question
+
+What predicts stylistic similarity between politicians' Shorts?
+
+### Specification
+
+The dependent variable is pairwise cosine similarity between politician $i$ and politician $j$ in month $t$:
+
+$$
+\text{Sim}_{ij,t} = \alpha + \beta_1 \cdot \text{SameParty}_{ij} + \beta_2 \cdot \text{SameDistrict}_{ij} + \gamma \mathbf{X}_{ij,t} + \delta_t + \epsilon_{ij,t}
+$$
+
+| Symbol | Description |
+|--------|-------------|
+| $\text{SameParty}_{ij}$ | 1 if $i$ and $j$ belong to the same party |
+| $\text{SameDistrict}_{ij}$ | 1 if same metro area (e.g., both Seoul) |
+| $\mathbf{X}_{ij,t}$ | Controls: seniority difference, committee overlap, etc. |
+| $\delta_t$ | Month fixed effects |
+| $\epsilon_{ij,t}$ | Clustered at the dyad level |
+
+### Implementation
+
+```{python}
+import statsmodels.formula.api as smf
+
+# Add covariates (example)
+# df_pairs["seniority_diff"] = ...
+# df_pairs["same_metro"] = ...
+
+model = smf.ols(
+    "cosine_sim ~ same_party + C(year_month)",
+    data=df_pairs
+).fit(cov_type="cluster", cov_kwds={"groups": df_pairs[["pol_i", "pol_j"]].apply(tuple, axis=1)})
+
+print(model.summary().tables[1])
+```
+
+::: {.callout-note}
+## Interpreting the coefficient
+$\beta_1 > 0$ means same-party politicians produce more similar Shorts. If $\beta_1 = 0.03$, same-party pairs are 3 percentage points more similar on a 0-1 cosine scale.
+:::
+
+## Electoral convergence (event study)
+
+### Design
+
+Do politicians' Shorts become more similar as elections approach?
+
+Define treatment as "months until the next election." Compare similarity trends in the pre-election window (6 months before) to the baseline period (12+ months before).
+
+```{python}
+from datetime import datetime
+
+# Example: April 2024 general election
+election_date = datetime(2024, 4, 10)
+
+df_pairs["date"] = pd.to_datetime(df_pairs["year_month"])
+df_pairs["months_to_election"] = (
+    (election_date.year - df_pairs["date"].dt.year) * 12
+    + (election_date.month - df_pairs["date"].dt.month)
+)
+
+# Keep a symmetric window
+window = df_pairs[
+    (df_pairs["months_to_election"] >= -3) &
+    (df_pairs["months_to_election"] <= 18)
+].copy()
+
+# Event study regression
+model_es = smf.ols(
+    "cosine_sim ~ C(months_to_election, Treatment(reference=12)) * same_party",
+    data=window
+).fit(cov_type="cluster", cov_kwds={"groups": window[["pol_i", "pol_j"]].apply(tuple, axis=1)})
+```
+
+### Visualization
+
+```{python}
+import matplotlib.pyplot as plt
+
+# Extract coefficients for months_to_election dummies
+coefs = []
+for m in range(-3, 19):
+    if m == 12:
+        coefs.append({"month": m, "beta": 0, "se": 0})
+        continue
+    key = f"C(months_to_election, Treatment(reference=12))[T.{m}]"
+    if key in model_es.params:
+        coefs.append({
+            "month": m,
+            "beta": model_es.params[key],
+            "se": model_es.bse[key],
+        })
+
+df_coefs = pd.DataFrame(coefs)
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.errorbar(df_coefs["month"], df_coefs["beta"],
+            yerr=1.96 * df_coefs["se"],
+            fmt="o-", capsize=3, color="#1B64D1")
+ax.axhline(0, color="gray", linestyle="--", linewidth=0.8)
+ax.axvline(0, color="red", linestyle=":", linewidth=0.8, label="Election")
+ax.set_xlabel("Months to Election")
+ax.set_ylabel("Δ Cosine Similarity (vs. baseline)")
+ax.set_title("Electoral Convergence in YouTube Shorts Style")
+ax.legend()
+ax.invert_xaxis()
+plt.tight_layout()
+plt.show()
+```
+
+## Scale-up plan
+
+### Phase 1: Pilot (current)
+
+| Item | Target |
+|------|--------|
+| Politicians | 5-10 (across parties) |
+| Shorts per politician | 5-10 |
+| Total embeddings | 50-100 |
+| Strategy | Multimodal (video + audio + text) |
+| Goal | Validate pipeline, check clustering signal |
+
+### Phase 2: Single election cycle
+
+| Item | Target |
+|------|--------|
+| Politicians | All 300 National Assembly members |
+| Time window | 12 months around April 2024 election |
+| Estimated Shorts | ~10,000-15,000 |
+| Cost (Audio+Text) | ~$70-105 |
+| Cost (Multimodal) | ~$430-645 |
+| Goal | Test all three research questions |
+
+### Phase 3: Full panel
+
+| Item | Target |
+|------|--------|
+| Politicians | All members, 21st-22nd Assembly |
+| Time window | 2020-2026 |
+| Estimated Shorts | ~30,000-50,000 |
+| Cost (Audio+Text) | ~$210-350 |
+| Cost (Multimodal) | ~$1,300-2,150 |
+| Goal | Publication-ready results |
+
+### Decision tree after pilot
+
+```
+Pilot results
+├─ Multimodal adds value (distance > 0.05 vs audio-only)
+│  ├─ Budget allows → Phase 2 with Multimodal
+│  └─ Budget tight  → Phase 2 with Audio+Text, sample Multimodal
+└─ Multimodal ≈ Audio (distance < 0.02)
+   └─ Phase 2 with Audio+Text (save ~6x cost)
+```
+
+::: {.callout-important}
+## Before scaling up
+1. Confirm embedding strategy (multimodal vs audio+text) based on pilot distance metrics
+2. Set up batch processing with rate limiting (File API has upload limits)
+3. Save embeddings incrementally (do not lose partial results on failure)
+4. Budget approval for API costs
+:::
+
+## Data management
+
+### File structure
+
+```
+multimodal-analysis/
+├── data/
+│   ├── raw/                    # Downloaded MP4s (not in git)
+│   ├── audio/                  # Extracted MP3s (not in git)
+│   ├── metadata.csv            # Video metadata from YouTube API
+│   ├── embeddings_text.npy     # (N, 3072) text-only
+│   ├── embeddings_audio.npy    # (N, 3072) audio-only
+│   ├── embeddings_multi.npy    # (N, 3072) multimodal
+│   └── panel.csv               # Aggregated politician-month panel
+├── quarto-site/                # This documentation site
+├── notebooks/                  # Exploratory Jupyter notebooks
+└── scripts/                    # Production batch scripts
+```
+
+### Reproducibility checklist
+
+- [ ] All embeddings saved as `.npy` with matching `metadata.csv`
+- [ ] UMAP uses `random_state=42` for reproducibility
+- [ ] File API upload timestamps logged (48-hour deletion window)
+- [ ] API costs tracked per batch run
+- [ ] Git tracks code and documentation; data stored locally only

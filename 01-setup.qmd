@@ -1,0 +1,141 @@
+---
+title: "1. Setup - API Configuration and Connection Test"
+date: "2026-03-13"
+execute:
+  eval: false
+---
+
+## Navigating Google's AI ecosystem
+
+The most confusing part of getting started is that Google offers multiple AI services. Here is what each one does and which one we use.
+
+### Google AI Studio vs Google Cloud vs Gemini CLI
+
+| | Google AI Studio | Google Cloud (Vertex AI) | Gemini CLI |
+|--|-----------------|--------------------------|------------|
+| **What it is** | Developer portal for Gemini API | Enterprise cloud platform | Terminal chat tool |
+| **URL** | aistudio.google.com | cloud.google.com | Standalone install |
+| **Auth** | API Key (simple) | Service Account / OAuth | Google account |
+| **Cost** | Free tier available | Per-project billing | Free (personal) |
+| **For research?** | **YES** | Overkill for academic use | NO (no embedding) |
+| **Python SDK** | `google-genai` | `google-cloud-aiplatform` | N/A |
+
+**We use Google AI Studio + `google-genai` SDK.** Vertex AI is for enterprises with complex billing and IAM needs. For a research project, it is overkill.
+
+::: {.callout-important}
+## The Gemini CLI cannot generate embeddings
+The CLI is a conversational interface. The transformation "text/video/audio → numerical vector" (embedding) is an API-only capability. Even though the CLI uses the same Gemini model, it cannot access the embedding endpoint. It also cannot run batch loops over thousands of files.
+:::
+
+### `google-genai` vs `google.generativeai` (legacy)
+
+Google rewrote the SDK in 2024. There are now two packages with confusingly similar names.
+
+| | `google-genai` (current) | `google.generativeai` (legacy) |
+|--|------------------------|-------------------------------|
+| **Install** | `pip install google-genai` | `pip install google-generativeai` |
+| **Import** | `from google import genai` | `import google.generativeai as genai` |
+| **Status** | Actively maintained | Deprecated |
+| **Embedding 2** | Supported | Not supported |
+
+::: {.callout-tip}
+Many online tutorials and StackOverflow answers still reference the legacy SDK.
+If you see `pip install google-generativeai`, it is the old version. Always use the new one.
+:::
+
+## Step 1: Get an API key
+
+1. Go to [Google AI Studio](https://aistudio.google.com) and sign in with your Google account
+2. Click **"Get API key"** in the sidebar or top-right
+3. Click **"Create API key"** → **"Create API key in new project"**
+4. Copy the generated key (format: `AIzaSy...`, ~39 characters)
+
+::: {.callout-note}
+Unlike some services, you can view your API key again later in AI Studio.
+However, never commit it to GitHub or include it in paper replication code.
+:::
+
+### Free tier vs Paid tier
+
+- **Free tier**: Sufficient for a 10-video pilot. However, your data is used to improve Google's models.
+- **Paid tier**: If data exposure is a concern, you can switch to paid starting at $5. Your data will not be used for model training.
+
+## Step 2: Environment setup
+
+### Store the API key as an environment variable
+
+Never hardcode the key in your scripts.
+
+```bash
+# Option A: Current terminal session only (for testing)
+export GOOGLE_API_KEY="AIzaSy..."
+
+# Option B: Persistent (recommended)
+echo 'export GOOGLE_API_KEY="AIzaSy..."' >> ~/.zshrc
+source ~/.zshrc
+
+# Verify
+echo $GOOGLE_API_KEY
+```
+
+### Install Python packages
+
+```bash
+pip install google-genai
+pip install umap-learn hdbscan
+pip install seaborn scikit-learn pandas numpy
+```
+
+```bash
+# Check ffmpeg (needed for audio extraction)
+ffmpeg -version
+# If missing: brew install ffmpeg
+```
+
+## Step 3: Connection test (text embedding)
+
+Start with the simplest test. Text is much cheaper and faster than video.
+
+```{python}
+import os
+from google import genai
+from google.genai import types
+import numpy as np
+
+# Initialize client
+client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+
+# Text embedding test
+result = client.models.embed_content(
+    model="gemini-embedding-2-preview",
+    contents="Political communication strategies on YouTube Shorts"
+)
+
+vec = np.array(result.embeddings[0].values)
+print(f"Dimensions: {vec.shape}")          # (3072,)
+print(f"First 5 values: {vec[:5]}")
+print(f"Vector norm: {np.linalg.norm(vec):.4f}")
+```
+
+If this runs without error, the API connection is working.
+
+::: {.callout-important}
+## Critical: how `contents` parameter works
+
+- `contents="string"` or `contents=["a", "b", "c"]` → returns **separate embeddings** for each item
+- `contents=types.Content(parts=[part1, part2, part3])` → returns **one unified embedding**
+
+Since we need a single vector per Short, we must use `types.Content(parts=[...])`.
+The Google blog example uses the list format, which would produce separate embeddings.
+Do not copy it as-is.
+:::
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `DefaultCredentialsError` | API key not set | `export GOOGLE_API_KEY=...` |
+| `Resource exhausted` | Free tier limit hit | Wait 24h or switch to Paid |
+| `Invalid MIME type` | Extension/MIME mismatch | Use `video/mp4`, `audio/mpeg` |
+| `PROCESSING timeout` | File API processing delay | Increase `time.sleep()` to 5s |
+| `File not found` | 48h auto-deletion | Re-upload the file |

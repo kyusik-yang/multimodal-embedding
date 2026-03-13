@@ -1,0 +1,22 @@
+# Rendered output (GitHub Actions will build this)
+_site/
+_freeze/
+.quarto/
+
+# Data files (too large for git)
+data/
+images/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

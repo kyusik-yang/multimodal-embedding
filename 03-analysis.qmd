@@ -1,0 +1,191 @@
+---
+title: "3. Analysis - Similarity, Visualization, and Clustering"
+date: "2026-03-13"
+execute:
+  eval: false
+---
+
+## Cosine similarity
+
+Cosine similarity measures how close two embedding vectors are in semantic space, ranging from -1 (opposite) to 1 (identical).
+
+```{python}
+import numpy as np
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Stack individual embeddings into a matrix
+vectors = np.stack([vec1, vec2, vec3])  # (N, 3072)
+
+# Full N x N similarity matrix
+sim_matrix = cosine_similarity(vectors)
+
+# Pairwise similarity between two specific vectors
+sim_ab = cosine_similarity(
+    vec_a.reshape(1, -1), vec_b.reshape(1, -1)
+)[0, 0]
+print(f"Similarity: {sim_ab:.4f}")
+```
+
+### Similarity heatmap
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+labels = [f"{row['name']} ({row['party'][:3]})" for _, row in df_meta.iterrows()]
+
+fig, ax = plt.subplots(figsize=(8, 6))
+sim = cosine_similarity(vectors)
+np.fill_diagonal(sim, np.nan)
+
+sns.heatmap(
+    sim, ax=ax,
+    vmin=0, vmax=1, cmap="Blues",
+    xticklabels=labels, yticklabels=labels,
+    annot=True, fmt=".2f", linewidths=0.3
+)
+ax.set_title("Cosine Similarity Matrix (Pilot)")
+plt.tight_layout()
+plt.show()
+```
+
+### Within-party vs between-party similarity
+
+A key empirical question: do politicians within the same party produce more similar Shorts?
+
+```{python}
+same_party, diff_party = [], []
+
+for i in range(len(df_meta)):
+    for j in range(i + 1, len(df_meta)):
+        sim_val = cosine_similarity(
+            vectors[i:i+1], vectors[j:j+1]
+        )[0, 0]
+        if df_meta.iloc[i]["party"] == df_meta.iloc[j]["party"]:
+            same_party.append(sim_val)
+        else:
+            diff_party.append(sim_val)
+
+print(f"Within-party similarity:  {np.mean(same_party):.4f}")
+print(f"Between-party similarity: {np.mean(diff_party):.4f}")
+print(f"Difference:               {np.mean(same_party) - np.mean(diff_party):.4f}")
+```
+
+## UMAP dimensionality reduction
+
+UMAP projects the 3072-dimensional embeddings into 2D for visualization, preserving local neighborhood structure.
+
+```{python}
+import umap
+
+reducer = umap.UMAP(
+    n_components=2,
+    n_neighbors=15,       # reduce to 5 for small samples (N < 15)
+    min_dist=0.1,
+    metric="cosine",      # standard for embeddings
+    random_state=42       # reproducibility
+)
+
+emb_2d = reducer.fit_transform(vectors)  # (N, 2)
+```
+
+### Visualization by party
+
+```{python}
+party_colors = {
+    "Democratic Party": "#1B64D1",
+    "People Power Party": "#E61E2B",
+    "Rebuilding Korea Party": "#00A6A6",
+}
+
+fig, ax = plt.subplots(figsize=(9, 7))
+
+for party, color in party_colors.items():
+    mask = df_meta["party"] == party
+    pts = emb_2d[mask]
+    ax.scatter(pts[:, 0], pts[:, 1],
+               label=party, s=120, color=color,
+               edgecolors="k", linewidths=0.5)
+
+for i, (x, y) in enumerate(emb_2d):
+    ax.annotate(df_meta.iloc[i]["name"],
+                (x, y), xytext=(4, 4),
+                textcoords="offset points", fontsize=8)
+
+ax.legend(fontsize=10, loc="best")
+ax.set_title("UMAP 2D Projection of Multimodal Embeddings")
+ax.set_xlabel("UMAP-1")
+ax.set_ylabel("UMAP-2")
+plt.tight_layout()
+plt.show()
+```
+
+## HDBSCAN clustering
+
+For larger datasets, HDBSCAN identifies clusters without requiring a pre-specified number of clusters. It also labels noise points (cluster = -1).
+
+::: {.callout-tip}
+Best practice: reduce to ~10 dimensions with UMAP first, then cluster. This avoids the curse of dimensionality and is much faster.
+:::
+
+```{python}
+import hdbscan
+
+# Step 1: UMAP to 10 dimensions
+reducer_10d = umap.UMAP(
+    n_components=10,
+    metric="cosine",
+    random_state=42
+)
+emb_10d = reducer_10d.fit_transform(vectors)
+
+# Step 2: HDBSCAN clustering
+clusterer = hdbscan.HDBSCAN(
+    min_cluster_size=15,
+    min_samples=5,
+    metric="euclidean"
+)
+labels = clusterer.fit_predict(emb_10d)
+
+print(f"Clusters found: {len(set(labels)) - (1 if -1 in labels else 0)}")
+print(f"Noise points:   {sum(labels == -1)}")
+```
+
+## Comparing embedding strategies
+
+The pilot produces embeddings from three strategies (text, audio, multimodal) for the same Shorts. Comparing them tells us whether multimodal adds value over simpler approaches.
+
+```{python}
+# Cosine distance between strategies (same Short, different strategy)
+strategy_pairs = [
+    ("text", "audio"),
+    ("text", "multimodal"),
+    ("audio", "multimodal"),
+]
+
+print("Mean cosine distance between strategies (same Short):")
+print("-" * 50)
+for s1, s2 in strategy_pairs:
+    n = min(len(emb_matrices[s1]), len(emb_matrices[s2]))
+    sims = cosine_similarity(emb_matrices[s1][:n], emb_matrices[s2][:n])
+    diagonal_sims = np.diag(sims)
+    mean_dist = 1 - np.mean(diagonal_sims)
+    print(f"  {s1:12} vs {s2:12}: {mean_dist:.4f}")
+```
+
+::: {.callout-note}
+## How to interpret the comparison
+- **Large distance** (> 0.05) between audio and multimodal: the video channel adds meaningful information. Multimodal is worth the extra cost.
+- **Small distance** (< 0.02): audio captures most of the relevant variation. Use Audio + Text to save money.
+:::
+
+## Pilot checklist
+
+After running the pilot, answer these questions before scaling up:
+
+- [ ] Does multimodal add value over audio-only? (distance > 0.05)
+- [ ] Do same-party politicians cluster together in UMAP?
+- [ ] Is the File API upload speed acceptable for batch processing?
+- [ ] Which cost tier fits the budget? (Audio+Text ~$200 vs Multimodal ~$1,300 for 30K)
+- [ ] Are there any Shorts that fail to embed? (format issues, duration limits)

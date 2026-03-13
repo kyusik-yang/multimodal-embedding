@@ -1,0 +1,115 @@
+---
+title: "Technical References"
+---
+
+## Embedding models
+
+### Gemini Embedding 2
+
+Google's first natively multimodal embedding model, released in March 2025. It accepts text, images, video, audio, and PDF inputs, projecting them into a shared 3072-dimensional vector space. This unified space is what makes cross-modal similarity measurement possible.
+
+- [Official documentation](https://ai.google.dev/gemini-api/docs/embeddings) - API reference, supported modalities, and usage examples
+- [Google blog announcement](https://blog.google/technology/google-deepmind/gemini-embedding-2-text-image-video/) - Design goals and benchmark results
+- [Pricing](https://ai.google.dev/pricing) - Per-token and per-second cost breakdown for each modality
+
+Key properties for this project:
+
+- **Native Korean**: trained on 100+ languages, no translation step needed
+- **Video up to 120s**: YouTube Shorts (under 60s) fit comfortably
+- **Unified space**: text, audio, and video embeddings are directly comparable via cosine similarity
+
+### ImageBind (Meta)
+
+An earlier multimodal embedding model from Meta AI (2023) that also maps multiple modalities into a shared space. We initially considered ImageBind but chose Gemini Embedding 2 because:
+
+- ImageBind lacks native Korean language support
+- It requires local GPU inference (no managed API)
+- Gemini's audio encoder handles speech content more effectively for our use case
+
+- [ImageBind paper](https://arxiv.org/abs/2305.05665) - Girdhar et al. (2023), "ImageBind: One Embedding Space To Bind Them All"
+- [GitHub repository](https://github.com/facebookresearch/ImageBind)
+
+## Dimensionality reduction
+
+### UMAP
+
+Uniform Manifold Approximation and Projection. A nonlinear dimensionality reduction technique that preserves both local and global structure better than t-SNE, while being significantly faster. We use UMAP in two roles:
+
+1. **Visualization** (3072 → 2D): for scatter plots colored by party or cluster
+2. **Pre-clustering** (3072 → 10D): HDBSCAN works better on moderately reduced data than on raw high-dimensional vectors
+
+- [McInnes, Healy, & Melville (2018)](https://arxiv.org/abs/1802.03426) - "UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction"
+- [umap-learn documentation](https://umap-learn.readthedocs.io/) - Python package with scikit-learn API
+- [Understanding UMAP](https://pair-code.github.io/understanding-umap/) - Interactive visual explainer by Google PAIR
+
+Key parameters for embedding data:
+
+| Parameter | Our setting | Why |
+|-----------|-------------|-----|
+| `metric` | `"cosine"` | Standard for normalized embedding vectors |
+| `n_neighbors` | 15 (default) | Lower (5-10) for small pilots |
+| `min_dist` | 0.1 | Allows tight clusters without forcing overlap |
+| `random_state` | 42 | Reproducibility (UMAP is stochastic) |
+
+### t-SNE
+
+An older alternative to UMAP. We do not use it here because it is slower on large datasets, does not preserve global structure well, and does not support the `transform` method (projecting new points onto an existing embedding).
+
+- [van der Maaten & Hinton (2008)](https://jmlr.org/papers/v9/vandermaaten08a.html) - Original t-SNE paper
+
+## Clustering
+
+### HDBSCAN
+
+Hierarchical Density-Based Spatial Clustering of Applications with Noise. Unlike K-means, HDBSCAN does not require specifying the number of clusters in advance. It identifies clusters of varying density and labels outlier points as noise (cluster = -1).
+
+- [Campello, Moulavi, & Sander (2013)](https://doi.org/10.1007/978-3-642-37456-2_14) - Original HDBSCAN paper
+- [McInnes, Healy, & Astels (2017)](https://doi.org/10.21105/joss.00205) - Python implementation (JOSS)
+- [hdbscan documentation](https://hdbscan.readthedocs.io/) - Usage guide with parameter tuning advice
+
+Best practice for embedding data: reduce dimensionality with UMAP first (to ~10D), then cluster. This avoids the curse of dimensionality and runs much faster.
+
+| Parameter | Our setting | Why |
+|-----------|-------------|-----|
+| `min_cluster_size` | 15 | Minimum meaningful cluster for political analysis |
+| `min_samples` | 5 | Noise tolerance; lower = fewer noise points |
+| `metric` | `"euclidean"` | Standard after UMAP reduction |
+
+## Similarity and distance
+
+### Cosine similarity
+
+The primary similarity measure for embedding vectors. Ranges from -1 (opposite) to 1 (identical). For normalized vectors (unit length), cosine similarity equals the dot product.
+
+$$
+\text{cos}(\mathbf{a}, \mathbf{b}) = \frac{\mathbf{a} \cdot \mathbf{b}}{||\mathbf{a}|| \cdot ||\mathbf{b}||}
+$$
+
+We use `sklearn.metrics.pairwise.cosine_similarity` for computing full pairwise matrices.
+
+- [scikit-learn documentation](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.cosine_similarity.html)
+
+## Panel data methods
+
+### Fixed effects regression
+
+For the pairwise similarity panel (politician-dyad x month), we use OLS with month fixed effects and cluster standard errors at the dyad level. This controls for time trends in overall Shorts production while identifying what predicts within-period similarity.
+
+- [Wooldridge (2010)](https://mitpress.mit.edu/9780262232586/) - *Econometric Analysis of Cross Section and Panel Data*, standard reference for panel methods
+- [statsmodels OLS](https://www.statsmodels.org/stable/regression.html) - Python implementation
+
+### Event study design
+
+To test electoral convergence, we use a pre/post event study around election dates. The key assumption is that similarity trends would remain flat absent the election.
+
+- [Freyaldenhoven, Hansen, & Shapiro (2019)](https://doi.org/10.1257/aer.20180609) - "Pre-Event Trends in the Panel Event-Study Design"
+
+## Tools and infrastructure
+
+| Tool | Purpose | Link |
+|------|---------|------|
+| Google AI Studio | API key management, usage dashboard | [aistudio.google.com](https://aistudio.google.com) |
+| `google-genai` | Python SDK for Gemini API | [PyPI](https://pypi.org/project/google-genai/) |
+| ffmpeg | Audio extraction from MP4 | [ffmpeg.org](https://ffmpeg.org) |
+| Quarto | This documentation site | [quarto.org](https://quarto.org) |
+| YouTube Data API | Video metadata collection | [developers.google.com](https://developers.google.com/youtube/v3) |

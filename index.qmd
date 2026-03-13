@@ -1,0 +1,55 @@
+---
+title: "Multimodal Embedding for Political Communication"
+subtitle: "Analyzing Korean Politicians' YouTube Shorts with Gemini Embedding 2"
+---
+
+## About this project
+
+This project applies **multimodal embeddings** to political communication research. We embed the full multimedia content of Korean politicians' YouTube Shorts (text, audio, and video) into a shared vector space using Google's Gemini Embedding 2 model. This allows us to measure stylistic similarity, detect content clusters, and trace how communication strategies evolve over time.
+
+Our subjects are members of the Korean National Assembly who maintain YouTube channels. YouTube Shorts, the platform's short-form vertical video format (under 60 seconds), has become a dominant medium for political messaging in South Korea since 2022.
+
+### Research questions
+
+1. **Clustering**: What types of political Shorts exist? Can we identify distinct communication styles (e.g., policy explainers, rally clips, personal branding) from embeddings alone?
+2. **Determinants of similarity**: What predicts stylistic similarity between politicians' Shorts: party affiliation, seniority, district characteristics, or electoral competitiveness?
+3. **Electoral dynamics**: Through what mechanisms do politicians' Shorts converge during election seasons?
+
+### Unit of analysis
+
+**Politician x month** panel: average multimodal embedding of all Shorts published by a politician in a given month.
+
+```
+YouTube Shorts collection (YouTube API)
+  → Multimodal embedding (Gemini Embedding 2)
+    → Dimensionality reduction (UMAP)
+      → Clustering (HDBSCAN)
+        ├─ Similarity determinants (Panel FE regression)
+        └─ Electoral convergence (Event study)
+```
+
+## Why this site exists
+
+This site serves two purposes:
+
+**1. Research process documentation.** Rather than presenting only final results, we document the entire pipeline from API setup to panel regression. Each page records our decisions, failed attempts, and workarounds as they happen. This transparency makes the research reproducible and helps collaborators understand not just *what* we did but *why*.
+
+**2. Teaching material.** Multimodal embedding is a new technique for social science. There are few tutorials that walk through the full workflow for researchers who are not ML engineers. This site is designed to be that tutorial, covering practical topics like API cost estimation, embedding strategy comparison, and aggregation for panel analysis.
+
+The site is organized as an exploratory walkthrough. We start from scratch (getting an API key), work through embedding strategies, compare results, and build toward a publication-ready panel design. Code cells are included at every step so readers can follow along or adapt the pipeline to their own data.
+
+### Technology stack
+
+| Component | Choice | Rationale |
+|-----------|--------|-----------|
+| Embedding model | [Gemini Embedding 2](https://ai.google.dev/gemini-api/docs/embeddings) | Native Korean support, accepts video up to 120s, unified vector space |
+| API | [Google AI Studio](https://aistudio.google.com) | Free tier available, simple API key authentication |
+| Python SDK | [`google-genai`](https://pypi.org/project/google-genai/) | Latest official SDK (replaces deprecated `google-generativeai`) |
+| Embedding dimensions | 3072 (default) | Highest quality; 768 or 256 available for cost/speed tradeoff |
+| Dimensionality reduction | [UMAP](https://umap-learn.readthedocs.io/) | Preserves local structure, supports cosine metric |
+| Clustering | [HDBSCAN](https://hdbscan.readthedocs.io/) | Noise-tolerant, does not require pre-specifying cluster count |
+
+::: {.callout-note}
+## For collaborators
+This site is built with [Quarto](https://quarto.org) and designed for co-editing. All code cells use `freeze: auto`, so outputs are cached and viewable without re-running API calls. To contribute, edit the `.qmd` files and run `quarto render`.
+:::

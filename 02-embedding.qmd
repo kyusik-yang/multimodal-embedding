@@ -1,0 +1,170 @@
+---
+title: "2. Embedding - Audio, Video, and Multimodal"
+date: "2026-03-13"
+execute:
+  eval: false
+---
+
+## Understanding the File API
+
+Audio and video files must be uploaded to Google's servers via the **File API** before they can be referenced in an embedding request.
+
+- **Inline bytes** (`from_bytes`): Works for files under 20MB
+- **File API upload**: Required for files over 20MB. YouTube Shorts MP4s range from 5-50MB, so the File API is the safe default.
+
+::: {.callout-note}
+Files uploaded via the File API are **automatically deleted after 48 hours**.
+For large-scale batch processing, upload just before embedding and save results immediately.
+:::
+
+### Upload helper function
+
+```{python}
+import time
+from pathlib import Path
+
+def upload_and_wait(client, file_path: str) -> str:
+    """Upload a file via File API and return the URI after processing."""
+    path = Path(file_path)
+    print(f"Uploading {path.name} ({path.stat().st_size / 1e6:.1f} MB)...")
+
+    uploaded = client.files.upload(path=str(path))
+
+    # Wait for server-side processing (typically 5-30 seconds)
+    while uploaded.state.name == "PROCESSING":
+        time.sleep(2)
+        uploaded = client.files.get(name=uploaded.name)
+
+    if uploaded.state.name == "FAILED":
+        raise RuntimeError(f"Upload failed: {path.name}")
+
+    print(f"  -> Done. URI: {uploaded.uri[:50]}...")
+    return uploaded.uri
+```
+
+## Audio embedding
+
+### Extracting audio from MP4
+
+```bash
+ffmpeg -i input_video.mp4 -vn -acodec libmp3lame -q:a 4 output_audio.mp3
+```
+
+| Flag | Meaning |
+|------|---------|
+| `-vn` | Strip video stream |
+| `-acodec libmp3lame` | Encode as MP3 |
+| `-q:a 4` | Quality (0 = best, 9 = worst; 4 is sufficient) |
+
+### Calling the embedding API
+
+```{python}
+audio_uri = upload_and_wait(client, "output_audio.mp3")
+
+result = client.models.embed_content(
+    model="gemini-embedding-2-preview",
+    contents=types.Content(
+        parts=[
+            types.Part.from_uri(
+                file_uri=audio_uri,
+                mime_type="audio/mpeg"
+            )
+        ]
+    )
+)
+
+audio_vec = np.array(result.embeddings[0].values)
+print(f"Audio embedding shape: {audio_vec.shape}")  # (3072,)
+```
+
+## Multimodal embedding (video + audio + text)
+
+Place multiple `Part` objects inside a single `Content` to produce one unified embedding.
+
+```{python}
+import subprocess
+from pathlib import Path
+
+def embed_short_multimodal(
+    client, mp4_path: str, title: str, description: str = ""
+) -> np.ndarray:
+    """Embed a single YouTube Short using video + audio + text."""
+    mp4 = Path(mp4_path)
+    audio = mp4.with_suffix(".mp3")
+
+    # Extract audio track
+    if not audio.exists():
+        subprocess.run([
+            "ffmpeg", "-i", str(mp4),
+            "-vn", "-acodec", "libmp3lame", "-q:a", "4",
+            str(audio), "-y", "-loglevel", "error"
+        ], check=True)
+
+    # Upload both files
+    video_uri = upload_and_wait(client, str(mp4))
+    audio_uri = upload_and_wait(client, str(audio))
+
+    # Request multimodal embedding
+    result = client.models.embed_content(
+        model="gemini-embedding-2-preview",
+        contents=types.Content(
+            parts=[
+                types.Part(text=f"{title}\n{description}".strip()),
+                types.Part.from_uri(file_uri=audio_uri, mime_type="audio/mpeg"),
+                types.Part.from_uri(file_uri=video_uri, mime_type="video/mp4"),
+            ]
+        )
+    )
+
+    return np.array(result.embeddings[0].values)  # (3072,)
+```
+
+### Example
+
+```{python}
+vec = embed_short_multimodal(
+    client=client,
+    mp4_path="./data/pilot_videos/EhkWgomdVSg.mp4",
+    title="The person to break the establishment! Kim Wooyoung!",
+    description="#DemocraticParty"
+)
+print(f"Multimodal embedding: {vec.shape}, norm={np.linalg.norm(vec):.4f}")
+```
+
+::: {.callout-note}
+## Why we send audio and video as separate Parts
+When an MP4 file is sent as `video/mp4`, Google processes the video frames. Whether the audio track within the MP4 is also embedded is not documented. The pricing page lists audio and video as separate line items, suggesting they are processed independently.
+
+To ensure speech content is captured, we extract and send the audio track as a separate Part. The pilot study (Section 3) compares video-only, audio-only, and multimodal embeddings to validate this choice empirically.
+:::
+
+## Strategy comparison
+
+| Strategy | Input | What it captures | Cost per Short (45s) |
+|----------|-------|-----------------|---------------------|
+| Text only | Title + description | Text message | ~$0.00001 |
+| Audio only | MP3 | Speech content + tone | ~$0.007 |
+| Audio + Text | MP3 + title | Content overall | ~$0.007 |
+| Multimodal | MP4 + MP3 + title | Visual + speech + text | ~$0.043 |
+
+### Cost estimates by scale (Audio + Text strategy)
+
+| Number of Shorts | Estimated cost |
+|------------------|---------------|
+| 10,000 | ~$70 |
+| 30,000 | ~$210 |
+| 50,000 | ~$350 |
+
+## Saving embeddings
+
+Embedding generation costs money and takes time. **Always save results.**
+
+```{python}
+# Save
+np.save("embeddings.npy", vectors)            # (N, 3072)
+df_meta.to_csv("metadata.csv", index=False)
+
+# Load
+vectors = np.load("embeddings.npy")
+df_meta = pd.read_csv("metadata.csv")
+```

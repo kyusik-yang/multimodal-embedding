@@ -1,0 +1,51 @@
+project:
+  type: book
+  output-dir: _site
+
+book:
+  title: "Multimodal Embedding for Political Communication"
+  subtitle: "Analyzing Korean Politicians' YouTube Shorts with Gemini Embedding 2"
+  author:
+    - name: "Kyusik Yang"
+      affiliation: "New York University"
+    - name: "Yongjai Yu"
+      affiliation: "UC Riverside"
+  date: "2026-03-13"
+  reader-mode: true
+  search: true
+  repo-url: https://github.com/kyusik-yang
+  page-footer:
+    center: "Kyusik Yang & Yongjai Yu | 2026"
+  chapters:
+    - index.qmd
+    - part: "Tutorial"
+      chapters:
+        - 01-setup.qmd
+        - 02-embedding.qmd
+    - part: "Analysis"
+      chapters:
+        - 03-analysis.qmd
+        - 04-panel.qmd
+    - part: "Appendix"
+      chapters:
+        - references.qmd
+
+format:
+  html:
+    theme:
+      light: cosmo
+    css: styles.css
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    code-tools: true
+    highlight-style: github
+    number-sections: false
+
+execute:
+  freeze: auto
+  enabled: false
+  echo: true
+  warning: false
+
+lang: en

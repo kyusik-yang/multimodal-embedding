@@ -1,0 +1,35 @@
+/* Korean font support */
+body {
+  font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+}
+
+code {
+  font-family: 'Menlo', 'SF Mono', 'Apple SD Gothic Neo', monospace;
+}
+
+/* Callout styling tweaks */
+.callout-note {
+  border-left-color: #4a90d9;
+}
+
+.callout-important {
+  border-left-color: #e74c3c;
+}
+
+.callout-tip {
+  border-left-color: #27ae60;
+}
+
+/* Sidebar refinements */
+.sidebar-title {
+  font-weight: 600;
+}
+
+/* Table readability */
+table {
+  font-size: 0.92em;
+}
+
+th {
+  background-color: #f8f9fa;
+}
