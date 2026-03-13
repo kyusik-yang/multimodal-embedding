@@ -292,6 +292,35 @@ Our project extends the text-as-data paradigm to video-as-data. This is a fronti
 
 3. **Measurement vs explanation**: Embeddings measure similarity, not causation. Our regression model uses embedding-derived similarity as a dependent variable and explains variation with theoretically motivated predictors (party, seniority, election proximity). The embedding itself is a measurement tool, not a causal model.
 
+### 4.4 Where our project fits: the literature gap
+
+A comprehensive search across Semantic Scholar, OpenAlex, and Google Scholar (March 2026) reveals that **no published study applies joint multimodal embeddings (video + audio + text in a single shared vector space) to a political science research question.** The adjacent literature falls into three strands:
+
+**Strand 1: Multimodal political analysis without joint embeddings.** These analyze multiple modalities but process each one separately.
+
+- Boussalis, C., Coan, T. G., Holman, M. R., & Muller, S. (2021). Gender, candidate emotional expression, and voter reactions during televised debates. *American Political Science Review*, 115(4), 1242-1257.
+    - Analyzes video (facial emotion via computer vision), audio (vocal pitch), and text (speech sentiment) from German election debates. Each modality has its own pipeline; no joint embedding space.
+- Agarwal, S., et al. (2024). Television discourse decoded: Comprehensive multimodal analytics at scale. *KDD 2024*. [DOI](https://doi.org/10.1145/3637528.3671532)
+
+**Strand 2: Single-modality "X as data" in political science.**
+
+- Dietrich, B. J., Hayes, M., & O'Brien, D. Z. (2019). Pitch perfect: Vocal pitch and the emotional intensity of Congressional speech. *American Political Science Review*, 113(4), 941-962.
+    - Pioneering "audio as data" in political science.
+- Knox, D. & Lucas, C. (2025). Partisan conflict in nonverbal communication. *Political Science Research and Methods*. [DOI](https://doi.org/10.1017/psrm.2025.10059)
+    - Audio-only (vocal pitch in Danish parliamentary debates).
+
+**Strand 3: Two-modality combinations (text + one other).**
+
+- Mestre, R., et al. (2023). Augmenting pre-trained language models with audio feature embedding for argumentation mining in political debates. *Findings of EACL*. [DOI](https://doi.org/10.18653/v1/2023.findings-eacl.21)
+    - Text + audio for US presidential debate analysis. Closest to our approach, but no video.
+- Ruyters, N., et al. (2025). Embedding, embedding on the wall: Exploring automated methods to study multimodal political news coverage. *Communication Methods and Measures*. [DOI](https://doi.org/10.1080/19312458.2025.2558736)
+    - Text + image from online political news. Modalities analyzed in parallel, not fused.
+
+::: {.callout-important}
+## The gap we fill
+Political science has established separate "text as data," "image as data," and "audio as data" traditions. But no published work projects all three modalities into a unified embedding space for political communication analysis. Our project bridges this gap by applying Gemini Embedding 2's joint multimodal encoding to YouTube Shorts.
+:::
+
 ---
 
 ## Phase 5: Panel methods and causal inference
