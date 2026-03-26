@@ -9,23 +9,38 @@ This project applies **multimodal embeddings** to political communication resear
 
 Our subjects are members of the Korean National Assembly who maintain YouTube channels. YouTube Shorts, the platform's short-form vertical video format (under 60 seconds), has become a dominant medium for political messaging in South Korea since 2022.
 
+### Data
+
+- **121,900 YouTube videos** from **263 legislators** (22nd National Assembly)
+- **51,197 Shorts** downloaded as MP4 (~342 GB)
+- **~38,000 Whisper transcripts** (MLX-accelerated, Korean fine-tuned)
+- **2,969 GPT-4o-mini content classifications** (10 categories)
+
 ### Research questions
 
 1. **Clustering**: What types of political Shorts exist? Can we identify distinct communication styles (e.g., policy explainers, rally clips, personal branding) from embeddings alone?
 2. **Determinants of similarity**: What predicts stylistic similarity between politicians' Shorts: party affiliation, seniority, district characteristics, or electoral competitiveness?
 3. **Electoral dynamics**: Through what mechanisms do politicians' Shorts converge during election seasons?
+4. **Visual-Verbal Gap**: To what extent do politicians' visual presentations diverge from their verbal content, and does this divergence predict engagement?
+
+### The Visual-Verbal Gap (VVG)
+
+A key concept developed from our pilot study. VVG measures the cosine distance between a Short's transcript embedding and its video-only embedding in Gemini's shared vector space. High VVG means a politician is *showing* something different from what they are *saying* - a hallmark of performative political communication.
 
 ### Unit of analysis
 
 **Politician x month** panel: average multimodal embedding of all Shorts published by a politician in a given month.
 
 ```
-YouTube Shorts collection (YouTube API)
-  → Multimodal embedding (Gemini Embedding 2)
-    → Dimensionality reduction (UMAP)
-      → Clustering (HDBSCAN)
+51,197 Shorts (YouTube API + yt-dlp)
+  → Whisper transcription (MLX, local)
+    → Text embedding (Gemini, full corpus, ~$0.50)
+    → Multimodal embedding (Gemini, 2,500 subsample, ~$234)
+      → VVG computation (text vs. video-only distance)
+        ├─ UMAP + HDBSCAN clustering
         ├─ Similarity determinants (Panel FE regression)
-        └─ Electoral convergence (Event study)
+        ├─ VVG predictors (Opposition, election proximity)
+        └─ Engagement model (VVG → views)
 ```
 
 ## Why this site exists
@@ -43,6 +58,7 @@ The site is organized as an exploratory walkthrough. We start from scratch (gett
 | Component | Choice | Rationale |
 |-----------|--------|-----------|
 | Embedding model | [Gemini Embedding 2](https://ai.google.dev/gemini-api/docs/embeddings) | Native Korean support, accepts video up to 120s, unified vector space |
+| Transcription | [MLX Whisper](https://huggingface.co/youngouk/whisper-medium-komixv2-mlx) | Korean fine-tuned, local GPU (Apple Silicon), zero API cost |
 | API | [Google AI Studio](https://aistudio.google.com) | Free tier available, simple API key authentication |
 | Python SDK | [`google-genai`](https://pypi.org/project/google-genai/) | Latest official SDK (replaces deprecated `google-generativeai`) |
 | Embedding dimensions | 3072 (default) | Highest quality; 768 or 256 available for cost/speed tradeoff |

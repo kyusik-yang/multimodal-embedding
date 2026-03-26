@@ -154,14 +154,15 @@ print(f"Noise points:   {sum(labels == -1)}")
 
 ## Comparing embedding strategies
 
-The pilot produces embeddings from three strategies (text, audio, multimodal) for the same Shorts. Comparing them tells us whether multimodal adds value over simpler approaches.
+The pilot produces embeddings from four strategies (text_title, text_transcript, audio, multimodal) for the same Shorts. Comparing them reveals which strategies add value and which are redundant.
 
 ```{python}
 # Cosine distance between strategies (same Short, different strategy)
 strategy_pairs = [
-    ("text", "audio"),
-    ("text", "multimodal"),
+    ("text_transcript", "audio"),
+    ("text_transcript", "multimodal"),
     ("audio", "multimodal"),
+    ("text_title", "text_transcript"),
 ]
 
 print("Mean cosine distance between strategies (same Short):")
@@ -171,21 +172,22 @@ for s1, s2 in strategy_pairs:
     sims = cosine_similarity(emb_matrices[s1][:n], emb_matrices[s2][:n])
     diagonal_sims = np.diag(sims)
     mean_dist = 1 - np.mean(diagonal_sims)
-    print(f"  {s1:12} vs {s2:12}: {mean_dist:.4f}")
+    print(f"  {s1:20} vs {s2:20}: {mean_dist:.4f}")
 ```
 
 ::: {.callout-note}
-## How to interpret the comparison
-- **Large distance** (> 0.05) between audio and multimodal: the video channel adds meaningful information. Multimodal is worth the extra cost.
-- **Small distance** (< 0.02): audio captures most of the relevant variation. Use Audio + Text to save money.
+## How to interpret the comparison (updated from pilot)
+- **text_transcript vs. audio** (0.11-0.20 for speech): audio is mostly redundant with transcript for speech-heavy content. Audio diverges for meme/music Shorts (0.40+).
+- **text_transcript vs. multimodal** (0.478): the video channel adds substantial information. Multimodal is worth the extra cost for a targeted subsample.
+- **text_title vs. text_transcript**: title embeddings carry party-labeling artifacts. Always prefer transcript.
+
+See Section 5 for the full pilot results and implications.
 :::
 
-## Pilot checklist
+## Next steps after analysis
 
-After running the pilot, answer these questions before scaling up:
+After running analysis on the pilot, move to:
 
-- [ ] Does multimodal add value over audio-only? (distance > 0.05)
-- [ ] Do same-party politicians cluster together in UMAP?
-- [ ] Is the File API upload speed acceptable for batch processing?
-- [ ] Which cost tier fits the budget? (Audio+Text ~$200 vs Multimodal ~$1,300 for 30K)
-- [ ] Are there any Shorts that fail to embed? (format issues, duration limits)
+1. **Full-corpus text embedding** (Section 4) - embed all 51K transcripts
+2. **VVG computation** (Section 5) - measure visual-verbal gap on stratified subsample
+3. **Panel regression** (Section 4) - test determinants of similarity and VVG

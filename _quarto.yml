@@ -10,7 +10,7 @@ book:
       affiliation: "New York University"
     - name: "Yongjai Yu"
       affiliation: "UC Riverside"
-  date: "2026-03-13"
+  date: "2026-03-26"
   reader-mode: true
   search: true
   repo-url: https://github.com/kyusik-yang
@@ -26,6 +26,9 @@ book:
       chapters:
         - 03-analysis.qmd
         - 04-panel.qmd
+    - part: "Results"
+      chapters:
+        - 05-pilot-results.qmd
     - part: "Appendix"
       chapters:
         - self-study.qmd

@@ -227,57 +227,120 @@ plt.tight_layout()
 plt.show()
 ```
 
-## Scale-up plan
+## VVG regression model
 
-### Phase 1: Pilot (current)
+### The Visual-Verbal Gap as a variable
+
+The VVG (defined in Section 5) can serve as both a dependent and independent variable.
+
+### VVG as DV: What predicts visual-verbal divergence?
+
+$$
+\text{VVG}_{it} = \alpha + \beta_1 \cdot \text{Opposition}_{it} + \beta_2 \cdot \text{ElectionProximity}_{t} + \gamma \mathbf{X}_{it} + \delta_t + \mu_i + \epsilon_{it}
+$$
+
+| Symbol | Description |
+|--------|-------------|
+| $\text{Opposition}_{it}$ | 1 if legislator $i$ belongs to the opposition at time $t$ |
+| $\text{ElectionProximity}_{t}$ | Months until the next election (April 2024) |
+| $\mathbf{X}_{it}$ | Controls: seniority, gender, PR vs. SMD, committee chair |
+| $\delta_t$ | Month fixed effects |
+| $\mu_i$ | Legislator fixed effects |
+
+```{python}
+import statsmodels.formula.api as smf
+
+# Panel: legislator x month, with VVG computed from subsample
+model_vvg = smf.ols(
+    "vvg ~ opposition + months_to_election + seniority + female"
+    " + pr_seat + C(year_month)",
+    data=df_panel_vvg
+).fit(cov_type="cluster", cov_kwds={"groups": df_panel_vvg["legislator_id"]})
+
+print(model_vvg.summary().tables[1])
+```
+
+### VVG as IV: Does visual performance predict engagement?
+
+$$
+\ln(\text{views}_{i}) = \alpha + \beta_1 \cdot \text{VVG}_{i} + \beta_2 \cdot \text{ContentType}_{i} + \mu_{\text{channel}} + \epsilon_{i}
+$$
+
+If $\beta_1 > 0$, higher visual-verbal divergence predicts more views. This would suggest that platform algorithms reward visual performance regardless of verbal substance.
+
+## Scale-up plan (updated after pilot)
+
+The pilot (Section 5) confirmed that multimodal embedding adds substantial value (distance = 0.432 vs. audio-only, far above the 0.05 threshold). Based on this, we adopt a tiered cost strategy.
+
+### Phase 1: Pilot (**completed**)
+
+| Item | Result |
+|------|--------|
+| Videos | 15 (10 high-engagement + 5 meme/music) |
+| Strategies | 4 (text_title, text_transcript, audio, multimodal) |
+| Total API calls | 72 |
+| Cost | ~$1.15 (free tier) |
+| Outcome | 4 key findings, VVG concept validated |
+
+### Phase 2: Full-corpus text embedding
 
 | Item | Target |
 |------|--------|
-| Politicians | 5-10 (across parties) |
-| Shorts per politician | 5-10 |
-| Total embeddings | 50-100 |
-| Strategy | Multimodal (video + audio + text) |
-| Goal | Validate pipeline, check clustering signal |
+| Shorts | 51,197 (all Shorts with Whisper transcripts) |
+| Strategy | text_transcript only |
+| Cost | ~$0.50 |
+| Runtime | ~1 hour |
+| Goal | Full-corpus baseline for clustering, embedding regression, UMAP |
 
-### Phase 2: Single election cycle
-
-| Item | Target |
-|------|--------|
-| Politicians | All 300 National Assembly members |
-| Time window | 12 months around April 2024 election |
-| Estimated Shorts | ~10,000-15,000 |
-| Cost (Audio+Text) | ~$70-105 |
-| Cost (Multimodal) | ~$430-645 |
-| Goal | Test all three research questions |
-
-### Phase 3: Full panel
+### Phase 3: Stratified multimodal subsample
 
 | Item | Target |
 |------|--------|
-| Politicians | All members, 21st-22nd Assembly |
-| Time window | 2020-2026 |
-| Estimated Shorts | ~30,000-50,000 |
-| Cost (Audio+Text) | ~$210-350 |
-| Cost (Multimodal) | ~$1,300-2,150 |
-| Goal | Publication-ready results |
+| Shorts | 2,500 (hypothesis-driven stratified sample) |
+| Strategies | video_only + multimodal + audio |
+| Cost | ~$234 |
+| Runtime | ~2 hours |
+| Goal | VVG computation, hypothesis testing (H~VVG1~-H~VVG4~) |
 
-### Decision tree after pilot
+### Sampling strategy for Phase 3
+
+| Block | N | Selection criterion |
+|-------|---|-------------------|
+| Party comparison | 1,000 | Balanced ruling vs. opposition |
+| Election proximity | 800 | Around April 2024 general election |
+| Content type | 500 | Stratified by GPT-classified category |
+| Engagement extremes | 200 | Top/bottom decile by views |
+
+### Phase 4: Optional full-corpus expansion
+
+| Item | Target |
+|------|--------|
+| Shorts | 51,197 |
+| Strategy | video_only (for full-corpus VVG) |
+| Cost | ~$2,200 |
+| Decision gate | Proceed only if Phase 3 shows strong VVG signal |
+
+### Decision tree (updated)
 
 ```
-Pilot results
-├─ Multimodal adds value (distance > 0.05 vs audio-only)
-│  ├─ Budget allows → Phase 2 with Multimodal
-│  └─ Budget tight  → Phase 2 with Audio+Text, sample Multimodal
-└─ Multimodal ≈ Audio (distance < 0.02)
-   └─ Phase 2 with Audio+Text (save ~6x cost)
+Phase 2 results (full-corpus text)
+├─ Text clustering reveals meaningful structure
+│  └─ Proceed to Phase 3 (multimodal subsample)
+│     ├─ VVG predicts engagement (H3 supported)
+│     │  ├─ Budget allows → Phase 4 (full-corpus video)
+│     │  └─ Budget tight  → Publish with subsample results
+│     └─ VVG does not predict engagement
+│        └─ Report null finding, focus on clustering paper
+└─ Text clustering is noise
+   └─ Investigate: transcript quality? embedding model? sample?
 ```
 
 ::: {.callout-important}
 ## Before scaling up
-1. Confirm embedding strategy (multimodal vs audio+text) based on pilot distance metrics
-2. Set up batch processing with rate limiting (File API has upload limits)
-3. Save embeddings incrementally (do not lose partial results on failure)
-4. Budget approval for API costs
+1. ~~Confirm embedding strategy~~ **Done** - multimodal confirmed in pilot
+2. Set up batch processing with rate limiting (2,800 RPM conservative)
+3. Save embeddings incrementally with checkpoint/resume (every 500 embeddings)
+4. Budget: ~$235 total for Phases 2-3 (approved)
 :::
 
 ## Data management

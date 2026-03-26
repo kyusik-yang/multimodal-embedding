@@ -131,12 +131,41 @@ To test electoral convergence, we use a pre/post event study around election dat
 
 - [Freyaldenhoven, Hansen, & Shapiro (2019)](https://doi.org/10.1257/aer.20180609) - "Pre-Event Trends in the Panel Event-Study Design"
 
+## Text embedding in political science
+
+Key references for the embedding regression framework that underlies our panel design.
+
+- [Rodriguez & Spirling (2022)](https://doi.org/10.1086/715162) - "Word Embeddings: What Works, What Doesn't, and How to Tell the Difference for Applied Research" (*JOP*)
+- [Rodriguez, Spirling & Stewart (2023)](https://doi.org/10.1017/S0003055422001228) - "Embedding Regression: Models for Context-Specific Description and Inference" (*APSR*) - the conText framework
+- [Rheault & Cochrane (2020)](https://doi.org/10.1017/pan.2019.26) - "Word Embeddings for the Analysis of Ideological Placement in Parliamentary Corpora" (*Political Analysis*)
+
+## Image and visual analysis in political science
+
+Emerging literature on computational visual analysis of political content.
+
+- [Torres & Cantú (2022)](https://doi.org/10.1017/pan.2021.9) - "Learning to See: Convolutional Neural Networks for the Analysis of Social Science Data" (*Political Analysis*)
+- [Zhang & Pan (2019)](https://doi.org/10.1177/0081175019860244) - "CASM: A Deep-Learning Approach for Identifying Collective Action Events with Text and Image Data from Social Media" (*Sociological Methodology*)
+
+## Multimodal approaches
+
+Closest methodological precedents and key models.
+
+- [Radford et al. (2021)](https://arxiv.org/abs/2103.00020) - "Learning Transferable Visual Models From Natural Language Supervision" (CLIP paper)
+- [Liang et al. (2022)](https://arxiv.org/abs/2203.02053) - "Mind the Gap: Understanding the Modality Gap in Multi-Modal Contrastive Representation Learning" (*NeurIPS 2022*). Documents systematic displacement between modalities in contrastive spaces, a key validity concern for VVG.
+
+## Transcription
+
+- [Whisper (Radford et al. 2023)](https://arxiv.org/abs/2212.04356) - "Robust Speech Recognition via Large-Scale Weak Supervision" - base model for our transcription pipeline
+- [whisper-medium-komixv2-mlx](https://huggingface.co/youngouk/whisper-medium-komixv2-mlx) - Korean fine-tuned Whisper Medium, MLX-accelerated for Apple Silicon. ~2.3 sec/video on M5 Pro.
+
 ## Tools and infrastructure
 
 | Tool | Purpose | Link |
 |------|---------|------|
 | Google AI Studio | API key management, usage dashboard | [aistudio.google.com](https://aistudio.google.com) |
 | `google-genai` | Python SDK for Gemini API | [PyPI](https://pypi.org/project/google-genai/) |
-| ffmpeg | Audio extraction from MP4 | [ffmpeg.org](https://ffmpeg.org) |
+| MLX Whisper | Local Korean speech transcription | [HuggingFace](https://huggingface.co/youngouk/whisper-medium-komixv2-mlx) |
+| ffmpeg | Audio/video extraction and manipulation | [ffmpeg.org](https://ffmpeg.org) |
+| yt-dlp | YouTube video download | [github.com/yt-dlp](https://github.com/yt-dlp/yt-dlp) |
 | Quarto | This documentation site | [quarto.org](https://quarto.org) |
 | YouTube Data API | Video metadata collection | [developers.google.com](https://developers.google.com/youtube/v3) |

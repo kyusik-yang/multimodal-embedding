@@ -42,6 +42,53 @@ def upload_and_wait(client, file_path: str) -> str:
     return uploaded.uri
 ```
 
+## Text embedding: Transcript vs. title
+
+Before embedding audio or video, we need a text baseline. There are two options, and the choice matters more than expected.
+
+### Title + description (metadata)
+
+```{python}
+result = client.models.embed_content(
+    model="gemini-embedding-exp-03-07",
+    contents=f"{title}\n{description}",
+    config=types.EmbedContentConfig(
+        task_type="SEMANTIC_SIMILARITY"
+    )
+)
+text_title_vec = np.array(result.embeddings[0].values)  # (3072,)
+```
+
+### Full transcript (Whisper)
+
+We use local Whisper transcription ([`whisper-medium-komixv2-mlx`](https://huggingface.co/youngouk/whisper-medium-komixv2-mlx), Korean fine-tuned, MLX GPU-accelerated) to generate speech transcripts for all Shorts. This runs on Apple Silicon at ~2.3 sec/video with zero API cost.
+
+```{python}
+result = client.models.embed_content(
+    model="gemini-embedding-exp-03-07",
+    contents=transcript_text,
+    config=types.EmbedContentConfig(
+        task_type="SEMANTIC_SIMILARITY"
+    )
+)
+text_transcript_vec = np.array(result.embeddings[0].values)  # (3072,)
+```
+
+::: {.callout-important}
+## Why transcript, not title?
+Our pilot (Section 5) revealed that title-based embeddings produce an artifactual party signal (+0.124 same-party similarity gap) driven by politician names and party hashtags in YouTube titles. Transcript-based embeddings show no such artifact (-0.018 gap). **Use transcripts as the text baseline for any substantive analysis.**
+:::
+
+### Transcript source unification
+
+For the full corpus (51,197 Shorts), we use MLX Whisper transcripts exclusively rather than mixing YouTube auto-captions (available for only ~6-8% of Shorts). This eliminates transcription source as a confound.
+
+| Whisper output | Share | Treatment |
+|----------------|-------|-----------|
+| Usable text (50+ characters) | ~74% | Embed as-is |
+| Minimal text (<50 characters) | ~18% | Flag; embed with caution |
+| No speech detected | ~8% | Exclude from text strategy |
+
 ## Audio embedding
 
 ### Extracting audio from MP4
@@ -62,7 +109,7 @@ ffmpeg -i input_video.mp4 -vn -acodec libmp3lame -q:a 4 output_audio.mp3
 audio_uri = upload_and_wait(client, "output_audio.mp3")
 
 result = client.models.embed_content(
-    model="gemini-embedding-2-preview",
+    model="gemini-embedding-exp-03-07",
     contents=types.Content(
         parts=[
             types.Part.from_uri(
@@ -106,7 +153,7 @@ def embed_short_multimodal(
 
     # Request multimodal embedding
     result = client.models.embed_content(
-        model="gemini-embedding-2-preview",
+        model="gemini-embedding-exp-03-07",
         contents=types.Content(
             parts=[
                 types.Part(text=f"{title}\n{description}".strip()),
@@ -138,22 +185,59 @@ When an MP4 file is sent as `video/mp4`, Google processes the video frames. Whet
 To ensure speech content is captured, we extract and send the audio track as a separate Part. The pilot study (Section 3) compares video-only, audio-only, and multimodal embeddings to validate this choice empirically.
 :::
 
+## Video-only embedding
+
+For computing the Visual-Verbal Gap (VVG), we need a pure video embedding with audio stripped. This isolates what the viewer *sees* from what the speaker *says*.
+
+```bash
+# Strip audio track, copy video stream without re-encoding
+ffmpeg -i input.mp4 -an -c:v copy video_only.mp4
+```
+
+```{python}
+video_only_uri = upload_and_wait(client, "video_only.mp4")
+
+result = client.models.embed_content(
+    model="gemini-embedding-exp-03-07",
+    contents=types.Content(
+        parts=[
+            types.Part.from_uri(
+                file_uri=video_only_uri,
+                mime_type="video/mp4"
+            )
+        ]
+    )
+)
+
+video_only_vec = np.array(result.embeddings[0].values)  # (3072,)
+```
+
 ## Strategy comparison
 
 | Strategy | Input | What it captures | Cost per Short (45s) |
 |----------|-------|-----------------|---------------------|
-| Text only | Title + description | Text message | ~$0.00001 |
-| Audio only | MP3 | Speech content + tone | ~$0.007 |
-| Audio + Text | MP3 + title | Content overall | ~$0.007 |
-| Multimodal | MP4 + MP3 + title | Visual + speech + text | ~$0.043 |
+| Text (transcript) | Whisper transcript | Verbal content (speech) | ~$0.00001 |
+| Text (title) | YouTube title + description | Self-labeling, metadata | ~$0.00001 |
+| Audio | MP3 | Speech + tone + music | ~$0.007 |
+| Video-only | Muted MP4 | Visual framing, editing, setting | ~$0.043 |
+| Multimodal | MP4 + MP3 + title | All channels combined | ~$0.043 |
 
-### Cost estimates by scale (Audio + Text strategy)
+::: {.callout-note}
+## Pilot insight: Audio vs. transcript overlap
+For speech-heavy Shorts (~70-80% of legislative content), audio and transcript embeddings are nearly redundant (cosine distance 0.11-0.20). They diverge only for meme/music content (0.40-0.43). See Section 5 for details.
+:::
 
-| Number of Shorts | Estimated cost |
-|------------------|---------------|
-| 10,000 | ~$70 |
-| 30,000 | ~$210 |
-| 50,000 | ~$350 |
+### Cost estimates: Tiered strategy
+
+Rather than embedding the full corpus with every strategy, we use a tiered approach informed by pilot results.
+
+| Tier | Scope | Strategies | Cost | Purpose |
+|------|-------|-----------|------|---------|
+| **1** | 51,197 Shorts | text_transcript | ~$0.50 | Full-corpus baseline, clustering, regression DV |
+| **2** | 2,500 stratified subsample | video_only + multimodal + audio | ~$234 | VVG computation, hypothesis testing |
+| **3** | Optional expansion | Depends on Tier 2 results | Variable | Full-corpus video if signal is strong |
+
+This tiered design yields the same analytical power as full-corpus multimodal embedding at roughly 5% of the cost.
 
 ## Saving embeddings
 
